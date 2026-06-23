@@ -17,10 +17,12 @@ import json
 import os
 import sys
 import argparse
+import ctypes
 from pathlib import Path
 
 import cv2
 import numpy as np
+import dxcam
 
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -39,14 +41,16 @@ class Labeler:
 
     def __init__(
         self,
-        region: tuple[int, int, int, int] | None = None,
+        crop_region: tuple[int, int, int, int] | None = None,
         output_dir: str = "data/raw",
     ):
-        self.region = region
+        self.crop_region = crop_region
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        self.cap = ScreenCapture(region=region)
+        # 强制 ScreenCapture 全屏抓取，通过 numpy 切片处理区域以绕过 DPI 问题
+        self.cap = ScreenCapture(region=None)
+        
         self.frame: np.ndarray | None = None             # current live frame
         self.frozen: np.ndarray | None = None            # frozen frame (being labeled)
         self.frozen_display: np.ndarray | None = None    # frozen frame with markers drawn
@@ -122,7 +126,7 @@ class Labeler:
         # Save marker coordinates
         data = {
             "targets": self.points,
-            "region": list(self.region) if self.region else None,
+            "region": list(self.crop_region) if self.crop_region else None,
         }
         json_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
@@ -136,6 +140,8 @@ class Labeler:
         print("  Space: Freeze | Left Click: Mark | Right Click: Undo")
         print("  S: Save | R: Clear Markers | Q: Quit")
         print(f"  Output: {self.output_dir.resolve()}")
+        if self.crop_region:
+            print(f"  Region: {self.crop_region} (L, T, R, B)")
         print("=" * 55)
 
         self.cap.start()
@@ -148,6 +154,12 @@ class Labeler:
                     if raw is None:
                         cv2.waitKey(1)
                         continue
+                    
+                    # 利用 NumPy 切片裁剪目标区域
+                    if self.crop_region:
+                        L, T, R, B = self.crop_region
+                        raw = raw[T:B, L:R]
+
                     self.frame = raw
                     display = self.frame.copy()
                 else:
@@ -201,6 +213,12 @@ class Labeler:
 
 # -- CLI ------------------------------------------------------------------
 if __name__ == "__main__":
+    # 1. 开启高 DPI 意识 (物理像素模式)
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except Exception:
+        ctypes.windll.user32.SetProcessDPIAware()
+
     parser = argparse.ArgumentParser(description="Sixshot Data Labeling Tool")
     parser.add_argument("--region", nargs=4, type=int, metavar=("L", "T", "R", "B"),
                         default=None, help="Capture region (left top right bottom)")
@@ -208,6 +226,23 @@ if __name__ == "__main__":
                         help="Output directory (default: data/raw)")
     args = parser.parse_args()
 
-    region = tuple(args.region) if args.region else None
-    labeler = Labeler(region=region, output_dir=args.output)
+    # 2. 如果没有通过命令行指定 region，自动计算屏幕中心的 600x600 区域
+    if args.region:
+        region = tuple(args.region)
+    else:
+        outputs = dxcam.output_info()
+        try:
+            out0 = outputs[0]["outputs"][0]
+            W, H = out0["width"], out0["height"]
+        except (IndexError, KeyError, TypeError):
+            user32 = ctypes.windll.user32
+            W, H = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+            
+        SIZE = 600
+        L = (W - SIZE) // 2
+        T = (H - SIZE) // 2
+        region = (L, T, L + SIZE, T + SIZE)
+        print(f"[Info] No region provided. Using default center {SIZE}x{SIZE} area.")
+
+    labeler = Labeler(crop_region=region, output_dir=args.output)
     labeler.run()
