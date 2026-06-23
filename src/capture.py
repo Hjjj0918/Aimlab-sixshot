@@ -56,13 +56,14 @@ if __name__ == "__main__":
     except Exception:
         ctypes.windll.user32.SetProcessDPIAware()
 
-    # 2. 全屏抓帧后用 NumPy 切片裁剪，绕过 DPI 区域坐标映射问题
+    # 2. 获取屏幕物理分辨率
     outputs = dxcam.output_info()
     print("[Debug] dxcam 设备列表:", outputs)
-    try:
-        out0 = outputs[0]["outputs"][0]
-        W, H = out0["width"], out0["height"]
-    except (IndexError, KeyError, TypeError):
+    import re
+    match = re.search(r"Res:\((\d+),\s*(\d+)\)", str(outputs))
+    if match:
+        W, H = int(match.group(1)), int(match.group(2))
+    else:
         user32 = ctypes.windll.user32
         W, H = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
 
