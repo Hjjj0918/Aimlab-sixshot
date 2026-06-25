@@ -33,9 +33,6 @@ Sixshot/
 │   ├── train.py             # (pending) Training script
 │   ├── pipeline.py          # (pending) Real-time detection pipeline
 │   └── bot.py               # (pending) Autonomous shooting
-├── notebooks/
-│   ├── 01_tensor_basics.ipynb       # Tensor, autograd, operations
-│   └── 02_first_network.ipynb       # CNN for MNIST classification
 ├── tests/
 │   └── test_capture.py      # Capture live preview test
 ├── data/raw/                # Labeled frames (PNG + JSON)
@@ -121,9 +118,3 @@ matplotlib>=3.7.0
 tqdm>=4.65.0
 ```
 
-## Learning Path
-
-This project is built as a learning exercise. Start with the notebooks:
-
-1. `notebooks/01_tensor_basics.ipynb` — Tensors, autograd, operations
-2. `notebooks/02_first_network.ipynb` — Build a CNN for MNIST, training loop
