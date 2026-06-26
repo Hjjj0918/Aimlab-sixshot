@@ -13,7 +13,7 @@ Capture → DL Detector → Control
 |--------|--------|-------------|
 | Capture | Done | dxcam screen capture, configurable ROI, BGR output |
 | Labeling | Done | Interactive tools for marking target centers in frames |
-| Dataset | Pending | PyTorch Dataset + Gaussian heatmap generation |
+| Dataset | Done | PyTorch Dataset + Gaussian heatmap generation |
 | Model | Pending | MiniHeatmapNet — U-Net style heatmap regression (~85k params) |
 | Training | Pending | Training loop, data augmentation, checkpointing |
 | Inference | Pending | Real-time target detection from captured frames |
