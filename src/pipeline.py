@@ -54,7 +54,7 @@ def main():
             user32 = ctypes.windll.user32
             W, H = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
 
-        SIZE = 600
+        SIZE = 800
         L = (W - SIZE) // 2
         T = (H - SIZE) // 2
         region = (L, T, L + SIZE, T + SIZE)
@@ -74,6 +74,12 @@ def main():
 
     # 4. Main loop
     cap.start()
+
+    # Create window and move it to top-left corner
+    # (avoids infinite mirror effect when the display overlaps the capture region)
+    window_name = "Sixshot AI Pipeline"
+    cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
+    cv2.moveWindow(window_name, 10, 10)
 
     prev_time = time.perf_counter()
     fps_smooth = 0.9
@@ -111,7 +117,7 @@ def main():
             cv2.putText(display, f"Targets: {len(points)}", (10, 60),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
 
-            cv2.imshow("Sixshot AI Pipeline", display)
+            cv2.imshow(window_name, display)
 
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
