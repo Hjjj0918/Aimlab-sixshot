@@ -46,7 +46,8 @@ def parse_args():
                    help="Gaussian sigma for heatmap targets")
     p.add_argument("--val-split", type=float, default=0.2,
                    help="Fraction of data for validation")
-    p.add_argument("--device", type=str, default="cpu",
+    default_dev = "cuda" if torch.cuda.is_available() else "cpu"
+    p.add_argument("--device", type=str, default=default_dev,
                    help="Training device: 'cpu' or 'cuda'")
     p.add_argument("--output-dir", type=str, default="checkpoints",
                    help="Directory for saving model checkpoints")
@@ -80,6 +81,7 @@ def main():
         data_dir=args.data_dir,
         sigma=args.sigma,
         downsample=1,
+        input_size=args.input_size,
     )
 
     if len(dataset) == 0:
