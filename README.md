@@ -24,13 +24,14 @@ Capture → DL Detector → Control
 ```
 Sixshot/
 ├── src/
-│   ├── capture.py          # Screen capture via dxcam
+│   ├── capture.py           # Screen capture via dxcam
 │   ├── labeler.py           # Live screen labeling tool
 │   ├── video_labeler.py     # Video-based labeling tool
-│   ├── dataset.py           # (pending) PyTorch Dataset + heatmaps
-│   ├── model.py             # (pending) MiniHeatmapNet
-│   ├── detect.py            # (pending) TargetDetector inference
-│   ├── train.py             # (pending) Training script
+│   ├── dataset.py           # PyTorch Dataset + heatmaps
+│   ├── model.py             # MiniHeatmapNet
+│   ├── detect.py            # TargetDetector inference
+│   ├── train.py             # Training script
+|   ├── train_utils.py             # Utility functions 
 │   ├── pipeline.py          # (pending) Real-time detection pipeline
 │   └── bot.py               # (pending) Autonomous shooting
 ├── tests/

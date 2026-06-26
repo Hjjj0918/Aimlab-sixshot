@@ -22,18 +22,25 @@ class SixshotDataset(Dataset):
         heatmap_tensor:  (1, H_ds, W_ds) float32 in [0, 1]
     """
 
-    def __init__(self, data_dir: str, sigma: float = 3.0, downsample: int = 1):
+    def __init__(
+        self,
+        data_dir: str,
+        sigma: float = 3.0,
+        downsample: int = 1,
+        input_size: int | None = None,
+    ):
         """
         Args:
-            data_dir:  Directory containing frame_*.png and frame_*.json files.
-            sigma:     Gaussian kernel standard deviation (pixels).
-                       Larger sigma = wider blur around each target center.
-            downsample: Downsample factor for heatmap relative to input.
-                        1 = same size, 4 = 1/4 resolution (CenterNet style).
+            data_dir:    Directory containing frame_*.png and frame_*.json files.
+            sigma:       Gaussian kernel standard deviation (pixels).
+            downsample:  Downsample factor for heatmap relative to input.
+            input_size:  If set, resize images to (input_size, input_size) square.
+                         Coordinates are scaled proportionally.
         """
         self.data_dir = Path(data_dir)
         self.sigma = sigma
         self.downsample = downsample
+        self.input_size = input_size
 
         # Find paired (png, json) files
         self.img_files = sorted(self.data_dir.glob("*.png"))
@@ -113,28 +120,40 @@ class SixshotDataset(Dataset):
     def __getitem__(self, idx):
         img_path, json_path = self.pairs[idx]
 
-        # 1. Load image: BGR -> RGB, normalize to [0, 1]
+        # 1. Load image: BGR -> RGB
         img = cv2.imread(str(img_path))
         if img is None:
             raise FileNotFoundError(f"Failed to load image: {img_path}")
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img_h, img_w = img.shape[:2]
 
-        img_tensor = torch.from_numpy(img).float() / 255.0      # (H, W, C)
-        img_tensor = img_tensor.permute(2, 0, 1)                # -> (C, H, W)
+        # 1.5 Resize if configured (scale: original -> target)
+        if self.input_size is not None:
+            scale_x = self.input_size / img_w
+            scale_y = self.input_size / img_h
+            img = cv2.resize(img, (self.input_size, self.input_size))
+            img_h, img_w = img.shape[:2]
+        else:
+            scale_x = 1.0
+            scale_y = 1.0
 
-        # 2. Load target coordinates from JSON
+        # 2. Normalize and convert to tensor: HWC -> CHW
+        img_tensor = torch.from_numpy(img).float() / 255.0
+        img_tensor = img_tensor.permute(2, 0, 1)
+
+        # 3. Load target coordinates from JSON and scale to resized image
         with open(json_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        targets = data.get("targets", [])
+        raw_targets = data.get("targets", [])
 
-        # 3. Build target heatmap at desired resolution
+        # 4. Build target heatmap at desired resolution
         hm_w = img_w // self.downsample
         hm_h = img_h // self.downsample
 
-        # Downsample coordinates to match heatmap grid
+        # Scale coordinates and apply downsample
         ds_targets = [
-            (x / self.downsample, y / self.downsample) for (x, y) in targets
+            (x * scale_x / self.downsample, y * scale_y / self.downsample)
+            for (x, y) in raw_targets
         ]
 
         heatmap = self._generate_heatmap(hm_w, hm_h, ds_targets, self.sigma)
