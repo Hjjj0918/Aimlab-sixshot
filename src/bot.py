@@ -19,6 +19,7 @@ import ctypes
 from pathlib import Path
 
 import cv2
+import numpy as np
 import dxcam
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -44,8 +45,10 @@ def main():
                         default=None)
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--threshold", type=float, default=0.7)
-    parser.add_argument("--scale", type=float, default=1.0,
-                        help="Mouse scale factor. Overshoot -> lower it. Undershoot -> raise it.")
+    parser.add_argument("--scale", type=float, default=None,
+                        help="Mouse scale. Auto-calibrated if not provided.")
+    parser.add_argument("--bias-y", type=float, default=-8,
+                        help="Vertical aim correction (negative = aim higher)")
     args = parser.parse_args()
 
     # 2. Region
@@ -84,6 +87,58 @@ def main():
 
     cap.start()
 
+    # -- Auto-calibrate scale via template matching ---------------------------
+    if args.scale is None:
+        CALIB_UNITS = 1000
+        print(f"[Calibrate] Sending {CALIB_UNITS}-unit flick, measuring...")
+
+        # Grab before frame
+        for _ in range(5):
+            cap.grab(); cv2.waitKey(10)
+        Lr, Tr, Rr, Br = region
+        before = cap.grab()
+        while before is None:
+            before = cap.grab()
+        before = before[Tr:Br, Lr:Rr]
+        before_gray = cv2.cvtColor(before, cv2.COLOR_BGR2GRAY)
+
+        # Extract center patch (200x200) as template
+        ph, pw = 200, 200
+        h, w = before_gray.shape
+        template = before_gray[h//2-ph//2:h//2+ph//2, w//2-pw//2:w//2+pw//2]
+
+        # Flick right
+        mouse.move(CALIB_UNITS, 0)
+        time.sleep(0.15)
+
+        # Grab after frame
+        for _ in range(3):
+            cap.grab(); cv2.waitKey(10)
+        after = cap.grab()
+        while after is None:
+            after = cap.grab()
+        after = after[Tr:Br, Lr:Rr]
+        after_gray = cv2.cvtColor(after, cv2.COLOR_BGR2GRAY)
+
+        # Template match: find where the old center moved
+        result = cv2.matchTemplate(after_gray, template, cv2.TM_CCOEFF_NORMED)
+        _, _, _, max_loc = cv2.minMaxLoc(result)
+        shift_x = max_loc[0] - (w//2 - pw//2)
+
+        # Flick back
+        mouse.move(-CALIB_UNITS, 0)
+
+        if abs(shift_x) > 5:
+            auto_scale = CALIB_UNITS / abs(shift_x)
+            print(f"[Calibrate] {CALIB_UNITS}u -> {shift_x}px. "
+                  f"Scale = {auto_scale:.4f}")
+            args.scale = auto_scale
+        else:
+            print(f"[Calibrate] Could not measure (shift={shift_x}px). "
+                  f"Using scale=1.0")
+            args.scale = 1.0
+
+    # -- Main loop -----------------------------------------------------------
     win_name = "Sixshot Bot"
     cv2.namedWindow(win_name, cv2.WINDOW_AUTOSIZE)
     cv2.moveWindow(win_name, 10, 10)
@@ -130,7 +185,7 @@ def main():
                         nearest = min(points, key=lambda p: (p[0] - cx) ** 2 + (p[1] - cy) ** 2)
 
                 dx = nearest[0] - cx
-                dy = nearest[1] - cy
+                dy = nearest[1] - cy + args.bias_y  # correct Y offset
                 dist = math.hypot(dx, dy)
 
                 elapsed = now - last_shot_time

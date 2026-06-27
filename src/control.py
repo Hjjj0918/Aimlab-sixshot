@@ -9,6 +9,34 @@ import math
 import interception
 
 
+# SendInput structures
+class MOUSEINPUT(ctypes.Structure):
+    _fields_ = [
+        ("dx", ctypes.c_long),
+        ("dy", ctypes.c_long),
+        ("mouseData", ctypes.c_ulong),
+        ("dwFlags", ctypes.c_ulong),
+        ("time", ctypes.c_ulong),
+        ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+    ]
+
+class INPUT(ctypes.Structure):
+    class _U(ctypes.Union):
+        _fields_ = [("mi", MOUSEINPUT)]
+    _anonymous_ = ("_u",)
+    _fields_ = [("type", ctypes.c_ulong), ("_u", _U)]
+
+    def __init__(self, _type=0, dx=0, dy=0, flags=0):
+        super().__init__()
+        self.type = _type
+        self.mi.dx = dx
+        self.mi.dy = dy
+        self.mi.mouseData = 0
+        self.mi.dwFlags = flags
+        self.mi.time = 0
+        self.mi.dwExtraInfo = None
+
+
 class MouseController:
     """Hybrid: Interception for cursor movement, mouse_event for clicks."""
 
@@ -61,26 +89,22 @@ class MouseController:
         self._lib.interception_send(self._ctx, self._device, stroke, 1)
 
     def click(self):
-        # Use mouse_event — often bypasses Raw Input for button events
-        self._user32.mouse_event(0x0002, 0, 0, 0, 0)   # LEFTDOWN
+        """SendInput click — one level below mouse_event."""
+        inp = INPUT(0, 0, 0, 0x0002)  # LEFTDOWN
+        self._user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
         time.sleep(0.015)
-        self._user32.mouse_event(0x0004, 0, 0, 0, 0)   # LEFTUP
+        inp = INPUT(0, 0, 0, 0x0004)  # LEFTUP
+        self._user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
 
     def shoot(self, dx: float, dy: float, scale: float = 1.0):
-        """Flick to target, fire only when crosshair is on it."""
-        dist = math.hypot(dx, dy)
-
-        if dist < 10:
-            self.click()
-            time.sleep(0.05)
-            return True
-
-        fraction = 0.7 if dist < 40 else 1.0
-        mx = int(round(dx * fraction * scale))
-        my = int(round(dy * fraction * scale))
+        """Flick + fire. Always moves and shoots."""
+        mx = int(round(dx * scale))
+        my = int(round(dy * scale))
         self.move(mx, my)
-        time.sleep(0.01)
-        return False
+        time.sleep(0.015)
+        self.click()
+        time.sleep(0.05)
+        return True
 
     def close(self):
         self._running = False
