@@ -39,6 +39,8 @@ def main():
                         default=None, help="Capture region (left top right bottom)")
     parser.add_argument("--device", type=str, default="cuda",
                         help="Inference device: cuda or cpu")
+    parser.add_argument("--threshold", type=float, default=0.7,
+                        help="Detection confidence threshold (0-1, higher = fewer false positives)")
     args = parser.parse_args()
 
     # 2. Determine capture region
@@ -62,7 +64,11 @@ def main():
 
     # 3. Initialize modules
     print(f"[Pipeline] Loading detector from {args.checkpoint}...")
-    detector = TargetDetector(checkpoint_path=args.checkpoint, device=args.device)
+    detector = TargetDetector(
+        checkpoint_path=args.checkpoint,
+        device=args.device,
+        threshold=args.threshold,
+    )
 
     # Fullscreen capture + numpy slicing (avoids dxcam DPI coordinate bugs)
     cap = ScreenCapture(region=None)
