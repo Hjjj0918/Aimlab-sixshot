@@ -1,7 +1,8 @@
 """
-MouseController - Hardware-level mouse injection via Interception driver.
-The ONLY method that bypasses Aimlab Raw Input.
+MouseController - Interception movement + Win32 clicks.
+Interception bypasses Raw Input for movement; mouse_event handles clicks.
 """
+import ctypes
 import threading
 import time
 import math
@@ -9,7 +10,7 @@ import interception
 
 
 class MouseController:
-    """Kernel-level mouse injection. Requires Interception driver installed."""
+    """Hybrid: Interception for cursor movement, mouse_event for clicks."""
 
     def __init__(self):
         self._ffi = interception.ffi
@@ -22,19 +23,20 @@ class MouseController:
             self._lib.INTERCEPTION_FILTER_MOUSE_ALL,
         )
 
-        print("[Mouse] Move your mouse to identify device...")
+        print("[Mouse] Move mouse to identify device...")
         self._device = self._lib.interception_wait(self._ctx)
 
-        # Forward the first event so mouse isn't stuck
         stroke = self._ffi.new("InterceptionMouseStroke *")
         self._lib.interception_receive(self._ctx, self._device, stroke, 1)
         self._lib.interception_send(self._ctx, self._device, stroke, 1)
         print(f"[Mouse] Device {self._device} ready.")
 
-        # Background forwarding thread
         self._running = True
         self._thread = threading.Thread(target=self._forward_loop, daemon=True)
         self._thread.start()
+
+        # Win32 user32 for clicks
+        self._user32 = ctypes.windll.user32
 
     def _forward_loop(self):
         stroke = self._ffi.new("InterceptionMouseStroke *")
@@ -46,30 +48,26 @@ class MouseController:
             except Exception:
                 break
 
-    def _send(self, flags: int, x: int = 0, y: int = 0):
+    def move(self, dx: int, dy: int):
+        if dx == 0 and dy == 0:
+            return
         stroke = self._ffi.new("InterceptionMouseStroke *")
         stroke.state = self._lib.INTERCEPTION_MOUSE_MOVE_RELATIVE
-        stroke.flags = flags
-        stroke.x = x
-        stroke.y = y
+        stroke.flags = 0
+        stroke.x = dx
+        stroke.y = dy
         stroke.rolling = 0
         stroke.information = 0
         self._lib.interception_send(self._ctx, self._device, stroke, 1)
 
-    def move(self, dx: int, dy: int):
-        if dx != 0 or dy != 0:
-            self._send(0, dx, dy)
-
     def click(self):
-        self._send(self._lib.INTERCEPTION_MOUSE_LEFT_BUTTON_DOWN)
+        # Use mouse_event — often bypasses Raw Input for button events
+        self._user32.mouse_event(0x0002, 0, 0, 0, 0)   # LEFTDOWN
         time.sleep(0.015)
-        self._send(self._lib.INTERCEPTION_MOUSE_LEFT_BUTTON_UP)
+        self._user32.mouse_event(0x0004, 0, 0, 0, 0)   # LEFTUP
 
     def shoot(self, dx: float, dy: float, scale: float = 1.0):
-        """Flick directly to target, then fire when close.
-
-        scale: 1.0 works well. Tune if crosshair over/undershoots.
-        """
+        """Flick to target, fire only when crosshair is on it."""
         dist = math.hypot(dx, dy)
 
         if dist < 10:
@@ -77,8 +75,9 @@ class MouseController:
             time.sleep(0.05)
             return True
 
-        mx = int(round(dx * scale))
-        my = int(round(dy * scale))
+        fraction = 0.7 if dist < 40 else 1.0
+        mx = int(round(dx * fraction * scale))
+        my = int(round(dy * fraction * scale))
         self.move(mx, my)
         time.sleep(0.01)
         return False
