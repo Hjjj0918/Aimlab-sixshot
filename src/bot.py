@@ -45,9 +45,9 @@ def main():
                         default=None)
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--threshold", type=float, default=0.85)
-    parser.add_argument("--scale", type=float, default=6.0)
-    parser.add_argument("--bias-y", type=float, default=-35)
-    parser.add_argument("--bias-x", type=float, default=-16)
+    parser.add_argument("--scale", type=float, default=7.5)
+    parser.add_argument("--bias-y", type=float, default=-14)
+    parser.add_argument("--bias-x", type=float, default=-64)
     args = parser.parse_args()
 
     # 2. Region
