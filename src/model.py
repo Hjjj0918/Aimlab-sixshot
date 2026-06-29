@@ -35,35 +35,35 @@ class MiniUNet(nn.Module):
     Output: (B, 1, H, W)  heatmap, [0, 1]
 
     Architecture:
-        Encoder:  3ch -> 16 -> 32 -> 64  (2x downsample)
-        Decoder:  64 -> 32 -> 16 -> 1    (2x upsample + skip connections)
+        Encoder:  3ch -> 32 -> 64 -> 128  (2x downsample)
+        Decoder:  128 -> 64 -> 32 -> 1    (2x upsample + skip connections)
     """
 
     def __init__(self, in_channels: int = 3, out_channels: int = 1):
         super().__init__()
 
         # -- Encoder (downsampling path) --
-        self.inc = DoubleConv(in_channels, 16)               # H, W
+        self.inc = DoubleConv(in_channels, 32)               # H, W
 
         self.down1 = nn.Sequential(
             nn.MaxPool2d(2),
-            DoubleConv(16, 32),
+            DoubleConv(32, 64),
         )                                                     # H/2, W/2
 
         self.down2 = nn.Sequential(
             nn.MaxPool2d(2),
-            DoubleConv(32, 64),
+            DoubleConv(64, 128),
         )                                                     # H/4, W/4  (bottleneck)
 
         # -- Decoder (upsampling path) --
-        self.up1 = nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2)
-        self.conv_up1 = DoubleConv(64, 32)                   # 32(skip) + 32(up) = 64
+        self.up1 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)
+        self.conv_up1 = DoubleConv(128, 64)                 # 64(skip) + 64(up) = 128
 
-        self.up2 = nn.ConvTranspose2d(32, 16, kernel_size=2, stride=2)
-        self.conv_up2 = DoubleConv(32, 16)                   # 16(skip) + 16(up) = 32
+        self.up2 = nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2)
+        self.conv_up2 = DoubleConv(64, 32)                  # 32(skip) + 32(up) = 64
 
         # -- Output head --
-        self.outc = nn.Conv2d(16, out_channels, kernel_size=1)
+        self.outc = nn.Conv2d(32, out_channels, kernel_size=1)
 
     def forward(self, x):
         # Encoder

@@ -29,19 +29,6 @@ from src.detect import TargetDetector
 from src.control import MouseController
 
 
-def _find_window(title_part: str) -> int:
-    """Return HWND of first window whose title contains `title_part`."""
-    user32 = ctypes.windll.user32
-    hwnd = user32.FindWindowW(None, None)
-    buf = ctypes.create_unicode_buffer(256)
-    while hwnd:
-        user32.GetWindowTextW(hwnd, buf, 256)
-        if title_part.lower() in buf.value.lower():
-            return hwnd
-        hwnd = user32.GetWindow(hwnd, 2)  # GW_HWNDNEXT
-    return 0
-
-
 def main():
     # 1. High-DPI
     try:
@@ -57,36 +44,28 @@ def main():
     parser.add_argument("--region", nargs=4, type=int, metavar=("L", "T", "R", "B"),
                         default=None)
     parser.add_argument("--device", type=str, default="cuda")
-    parser.add_argument("--threshold", type=float, default=0.80)
-    parser.add_argument("--scale", type=float, default=7.5)
-    parser.add_argument("--bias-y", type=float, default=-15)
-    parser.add_argument("--bias-x", type=float, default=0)
+    parser.add_argument("--threshold", type=float, default=0.85)
+    parser.add_argument("--scale", type=float, default=6.0)
+    parser.add_argument("--bias-y", type=float, default=-35)
+    parser.add_argument("--bias-x", type=float, default=-16)
     args = parser.parse_args()
 
-    # 2. Region — auto-track Aimlab window
+    # 2. Region
     if args.region:
         region = tuple(args.region)
     else:
-        # Find Aimlab window
-        aim_hwnd = _find_window("aimlab")
-        if aim_hwnd:
-            class RECT(ctypes.Structure):
-                _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
-                            ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
-            r = RECT()
-            ctypes.windll.user32.GetWindowRect(aim_hwnd, ctypes.byref(r))
-            region = (r.left, r.top, r.right, r.bottom)
-            print(f"[Bot] Tracking Aimlab window: {region}")
+        info = dxcam.output_info()
+        match = re.search(r"Res:\((\d+),\s*(\d+)\)", str(info))
+        if match:
+            W, H = int(match.group(1)), int(match.group(2))
         else:
-            print("[Bot] WARNING: Aimlab window not found, using center 800x800")
-            info = dxcam.output_info()
-            match = re.search(r"Res:\((\d+),\s*(\d+)\)", str(info))
-            W = int(match.group(1)) if match else ctypes.windll.user32.GetSystemMetrics(0)
-            H = int(match.group(2)) if match else ctypes.windll.user32.GetSystemMetrics(1)
-            SIZE = 800
-            L = (W - SIZE) // 2
-            T = (H - SIZE) // 2
-            region = (L, T, L + SIZE, T + SIZE)
+            user32 = ctypes.windll.user32
+            W, H = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+        SIZE = 800
+        L = (W - SIZE) // 2
+        T = (H - SIZE) // 2
+        region = (L, T, L + SIZE, T + SIZE)
+        print(f"[Bot] Default center region: {region}")
 
     # 3. Init
     print(f"[Bot] Loading detector from {args.checkpoint}...")
@@ -116,7 +95,7 @@ def main():
     fps_smooth = 0.9
     current_fps = 0.0
     last_shot_time = 0.0
-    shot_cooldown = 1   # seconds between shots
+    shot_cooldown = 0.2   # seconds between shots
     lock_target = None    # (x, y) of locked-on target when >2 detections
 
     try:
