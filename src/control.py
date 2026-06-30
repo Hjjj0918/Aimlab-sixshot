@@ -97,7 +97,7 @@ class MouseController:
         self._user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
 
     def shoot(self, dx: float, dy: float, scale: float = 1.0):
-        """Flick + fire. Always moves and shoots."""
+        """Move + click (original behavior)."""
         mx = int(round(dx * scale))
         my = int(round(dy * scale))
         self.move(mx, my)
@@ -105,6 +105,18 @@ class MouseController:
         self.click()
         time.sleep(0.05)
         return True
+
+    def flick(self, dx: float, dy: float, scale: float = 1.0):
+        """Move only. No click."""
+        mx = int(round(dx * scale))
+        my = int(round(dy * scale))
+        self.move(mx, my)
+        time.sleep(0.01)
+
+    def fire(self):
+        """Click only. No move."""
+        self.click()
+        time.sleep(0.05)
 
     def close(self):
         self._running = False

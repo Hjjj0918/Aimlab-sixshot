@@ -95,8 +95,9 @@ def main():
     fps_smooth = 0.9
     current_fps = 0.0
     last_shot_time = 0.0
-    shot_cooldown = 0.1   # seconds between shots
-    lock_target = None    # (x, y) of locked-on target when >2 detections
+    shot_cooldown = 0.1    # seconds between shots
+    lock_target = None     # (x, y) of locked-on target when >2 detections
+    just_fired = False     # force flick after a miss
 
     try:
         while True:
@@ -137,17 +138,20 @@ def main():
                 dist = math.hypot(dx, dy)
 
                 elapsed = now - last_shot_time
-                if dist < 10 and elapsed < shot_cooldown:
-                    pass
-                else:
-                    fired = mouse.shoot(dx, dy, args.scale)
-                    if fired:
-                        last_shot_time = now
-                        lock_target = None
-                    tag = "FIRE" if fired else "aim "
-                    if fired or dist > 50:
+                if dist < 8 and elapsed >= shot_cooldown and not just_fired:
+                    mouse.fire()
+                    last_shot_time = now
+                    lock_target = None
+                    just_fired = True
+                    print(f"[Bot] FIRE: delta({dx:+6.1f},{dy:+6.1f}) "
+                          f"{dist:5.0f}px | {len(points)}d", flush=True)
+                elif dist >= 8 or just_fired:
+                    # Re-flick: either far away, or close but missed last shot
+                    just_fired = False
+                    mouse.flick(dx, dy, args.scale)
+                    if dist > 50:
                         lock_info = " LOCK" if lock_target else ""
-                        print(f"[Bot] {tag}: delta({dx:+6.1f},{dy:+6.1f}) "
+                        print(f"[Bot] flick: delta({dx:+6.1f},{dy:+6.1f}) "
                               f"{dist:5.0f}px | {len(points)}d{lock_info}", flush=True)
 
             # -- Overlay --
