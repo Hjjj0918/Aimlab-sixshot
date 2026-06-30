@@ -2,6 +2,8 @@
 
 Real-time computer vision + hardware-level mouse control for the Aimlab Sixshot task.
 
+![Demo](docs/demo.gif)
+
 ## Architecture
 
 ```
@@ -35,11 +37,13 @@ Sixshot/
 │   ├── pipeline.py           # Visual pipeline (capture + detection overlay)
 │   ├── control.py            # Interception driver + SendInput mouse control
 │   ├── bot.py                # Autonomous aim bot (capture → detect → shoot)
+│   ├── bot_debug.py           # Experimental bot variant (separated flick/fire, currently testing only)
 │   └── window_tool.py        # Force Aimlab window to screen center
+├── docs/                     # Screenshots and demo images
 ├── tests/
 │   └── test_capture.py       # Capture live preview test
-├── data/raw/                 # Labeled frames (PNG + JSON)
-├── checkpoints/              # Saved model weights
+├── data/raw/ (currently git ignored)                # Labeled frames (PNG + JSON)
+├── checkpoints/ (currently git ignored)             # Saved model weights
 ├── requirements.txt
 └── README.md
 ```
@@ -60,16 +64,28 @@ The bot requires the [Interception](https://github.com/oblitum/Interception) dri
 
 ## Quick Start
 
+### 1. Get the Model
+
+Download `best_model.pt` from [GitHub Releases](../../releases) and place it
+in `checkpoints/`, or train from scratch:
+
+(Requires labeled data in `data/raw/` — see Data Labeling section)
 ```bash
-# 1. Position Aimlab window at screen center 800x800
+python src/train.py --data-dir data/raw --epochs 300 --sigma 2.5 --input-size 512 --batch-size 8
+```
+
+### 2. Position & Run
+
+```bash
+# Position Aimlab window at screen center 800x800
 python src/window_tool.py --title "aimlab_tb" --size 800
 
-# 2. Run the bot
+# Run the bot
 python src/bot.py
 
-# 3. Press G to toggle auto-shoot
-#    Press Esc for emergency stop
-#    Press Q to quit
+# G  : Toggle auto-shoot
+# Esc: Emergency stop
+# Q  : Quit
 ```
 
 ## Data Labeling
@@ -97,7 +113,7 @@ python src/labeler.py --region L T R B
 Mark targets frame-by-frame in recorded gameplay:
 
 ```bash
-python src/video_labeler.py --video gameplay.mp4
+python src/video_labeler.py --video gameplay.mp4 ## (Use your own recorded video file)
 ```
 
 | Key | Action |
@@ -111,7 +127,7 @@ python src/video_labeler.py --video gameplay.mp4
 ## Training
 
 ```bash
-python src/train.py --data-dir data/raw --epochs 100 --sigma 1.5
+python src/train.py --data-dir data/raw --epochs 300 --sigma 2.5 --input-size 512 --batch-size 8
 ```
 
 Outputs to `checkpoints/`:
@@ -129,25 +145,48 @@ python src/pipeline.py --checkpoint checkpoints/best_model.pt
 
 Green circles on detected targets. Press Q to quit.
 
-## Bot Options
+![Pipeline detection overlay](docs/pipeline_demo.png)
+
+## Bot
 
 ```bash
 python src/bot.py [options]
 ```
 
+Press **G** to toggle auto-shoot, **Esc** for emergency stop, **Q** to quit.
+
+![Bot running in Aimlab Sixshot](docs/bot_demo.png)
+
+## Options Reference
+
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--checkpoint` | `checkpoints/best_model.pt` | Model path |
 | `--threshold` | `0.85` | Detection confidence (higher = fewer false positives) |
-| `--scale` | `6.0` | Mouse sensitivity ratio |
-| `--bias-x` | `-16` | Horizontal aim correction |
-| `--bias-y` | `-35` | Vertical aim correction |
+| `--scale` | `6.0` | Mouse flick multiplier |
+| `--bias-x` | `0` | Horizontal aim correction |
+| `--bias-y` | `-14` | Vertical aim correction |
 | `--region L T R B` | auto | Capture region |
 | `--device` | `cuda` | `cuda` or `cpu` |
 
 ### Bias Correction
 
-Model predictions have systematic offset from true ball centers due to annotation noise and heatmap quantization. Tune `--bias-x` and `--bias-y` per trained model.
+Model predictions have systematic offsets from true ball centers due to
+annotation noise and heatmap quantization. The default bias values are
+**calibrated for Aimlab positioned at screen center 800×800** (via
+`window_tool.py`).
+
+> If you move the Aimlab window to a different position or resize it,
+> the capture region center will no longer align with the game crosshair.
+> **You must re-tune `--bias-x` and `--bias-y`** after moving the window.
+>
+> ```bash
+> # Start with zero bias, observe the offset, then adjust
+> python src/bot.py --bias-x 0 --bias-y 0
+> # If crosshair consistently lands left of the ball  → --bias-x -10
+> # If crosshair consistently lands right of the ball → --bias-x +10
+> # Same logic for --bias-y (negative = aim higher)
+> ```
 
 ## Dependencies
 
